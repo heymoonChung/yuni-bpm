@@ -213,7 +213,11 @@ export default function BeatDrop() {
               }
             });
           }
-          return next >= 256 ? 0 : next; // loop forever
+          if (next >= 256) {
+            playedRef.current.clear(); // 루프 리셋 시 재생 기록 초기화
+            return 0;
+          }
+          return next;
         });
 
         lastTRef.current = ts;
