@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Heart, Play, Clock, Award } from 'lucide-react';
+import { motion, useAnimationFrame } from 'motion/react';
+import { Heart, Play, Drum } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useTrack } from '../context/TrackContext';
 
@@ -33,23 +33,51 @@ export default function Home() {
           transition={{ duration: 0.6 }}
           className="mb-8 landscape:mb-0 text-center"
         >
+          {/* Animated YUNI.BPM Title */}
+          <style>{`
+            @keyframes neonFlicker {
+              0%,19%,21%,23%,25%,54%,56%,100% {
+                text-shadow:
+                  0 0 10px #ff3d8f,
+                  0 0 25px #ff3d8f,
+                  0 0 50px #ff3d8f,
+                  0 0 100px #ff3d8f;
+                color: #ff3d8f;
+              }
+              20%,24%,55% {
+                text-shadow: none;
+                color: rgba(255,61,143,0.4);
+              }
+            }
+            @keyframes rainbowShift {
+              0%   { color: #ff3d8f; text-shadow: 0 0 20px #ff3d8f, 0 0 50px #ff3d8f; }
+              25%  { color: #5ffbf1; text-shadow: 0 0 20px #5ffbf1, 0 0 50px #5ffbf1; }
+              50%  { color: #bf5fff; text-shadow: 0 0 20px #bf5fff, 0 0 50px #bf5fff; }
+              75%  { color: #5ffbf1; text-shadow: 0 0 20px #5ffbf1, 0 0 50px #5ffbf1; }
+              100% { color: #ff3d8f; text-shadow: 0 0 20px #ff3d8f, 0 0 50px #ff3d8f; }
+            }
+            @keyframes pulse-glow {
+              0%, 100% { filter: drop-shadow(0 0 8px #ff3d8f); }
+              50%       { filter: drop-shadow(0 0 20px #5ffbf1); }
+            }
+            .yuni-title {
+              animation: rainbowShift 3s ease-in-out infinite;
+              font-size: 3rem;
+              letter-spacing: 0.1em;
+              font-weight: 700;
+              cursor: default;
+              user-select: none;
+            }
+            .yuni-heart {
+              animation: pulse-glow 1.5s ease-in-out infinite;
+            }
+          `}</style>
           <div className="flex items-center justify-center gap-3 mb-4">
-            <Heart className="w-10 h-10" style={{ color: 'var(--neon-pink)' }} fill="var(--neon-pink)" />
-            <h1 className="text-5xl tracking-wider" style={{
-              color: 'var(--neon-pink)',
-              textShadow: '0 0 20px var(--neon-pink), 0 0 40px var(--neon-pink)',
-              fontWeight: 'var(--font-weight-medium)',
-            }}>
-              YUNI.BPM
-            </h1>
+            <Heart className="yuni-heart w-10 h-10" style={{ color: 'var(--neon-pink)' }} fill="var(--neon-pink)" />
+            <h1 className="yuni-title">YUNI.BPM</h1>
+            <Drum className="yuni-heart w-8 h-8" style={{ color: 'var(--neon-cyan)' }} />
           </div>
-          <p
-            className="text-lg mb-2"
-            style={{
-              color: 'var(--neon-cyan)',
-              textShadow: '0 0 10px var(--neon-cyan)'
-            }}
-          >
+          <p className="text-lg mb-2" style={{ color: 'var(--neon-cyan)', textShadow: '0 0 10px var(--neon-cyan)' }}>
             {dailyMessage || "유니의 드럼 연습 파트너 ✨"}
           </p>
         </motion.div>
@@ -80,17 +108,11 @@ export default function Home() {
               <div className="text-xs opacity-60 mb-1" style={{ color: 'var(--neon-green)' }}>
                 Last Practice
               </div>
-              <div
-                className="text-xl"
-                style={{
-                  color: 'var(--neon-pink)',
-                  fontWeight: 'var(--font-weight-medium)',
-                }}
-              >
-                {currentTrack ? currentTrack.title : 'Superstition'}
+              <div className="text-xl" style={{ color: 'var(--neon-pink)', fontWeight: 'var(--font-weight-medium)' }}>
+                {currentTrack?.title || '아직 없음'}
               </div>
               <div className="text-sm opacity-70 mt-1" style={{ color: 'var(--foreground)' }}>
-                {currentTrack ? currentTrack.artist : 'Stevie Wonder'}
+                {currentTrack?.artist || 'Beat Drop에서 곡을 선택해 주세요'}
               </div>
             </div>
             <div className="flex flex-col items-end gap-2">

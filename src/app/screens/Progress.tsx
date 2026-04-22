@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { ChevronLeft, ChevronRight, Mic, Calendar as CalendarIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Mic, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
 
 interface PracticeLog {
   date: string;
@@ -12,31 +12,6 @@ interface PracticeLog {
 
 const MOODS = ['😊', '😎', '🔥', '💪', '😅', '😌', '🎯'];
 
-// Default logs if localStorage is empty
-const defaultLogs: PracticeLog[] = [
-  {
-    date: '2026-04-22',
-    mood: '🔥',
-    duration: 45,
-    notes: 'Superstition 템포 120까지 완주! 킥 타이밍이 많이 좋아졌어요',
-    hasVoiceNote: true,
-  },
-  {
-    date: '2026-04-21',
-    mood: '😊',
-    duration: 30,
-    notes: '오늘은 기본 그루브 연습. 메트로놈 맞추기 재밌었어요',
-    hasVoiceNote: false,
-  },
-  {
-    date: '2026-04-20',
-    mood: '💪',
-    duration: 60,
-    notes: '더블킥 연습! 힘들었지만 재밌었어요',
-    hasVoiceNote: true,
-  },
-];
-
 export default function Progress() {
   const [currentMonth] = useState(new Date());
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
@@ -46,11 +21,15 @@ export default function Progress() {
     const savedLogs = localStorage.getItem('yuni_practice_logs');
     if (savedLogs) {
       setPracticeLogs(JSON.parse(savedLogs));
-    } else {
-      setPracticeLogs(defaultLogs);
-      localStorage.setItem('yuni_practice_logs', JSON.stringify(defaultLogs));
     }
   }, []);
+
+  const handleClearLogs = () => {
+    if (window.confirm('모든 연습 기록을 삭제할까요?')) {
+      localStorage.removeItem('yuni_practice_logs');
+      setPracticeLogs([]);
+    }
+  };
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -179,30 +158,35 @@ export default function Progress() {
 
       <div className="space-y-4 landscape:grid landscape:grid-cols-2 landscape:gap-6 landscape:space-y-0">
         <div className="flex items-center justify-between landscape:col-span-2">
-          <h3
-            className="text-sm opacity-70"
-            style={{ color: 'var(--neon-pink)' }}
-          >
-            RECENT PRACTICE
-          </h3>
-          <div className="flex gap-1">
-            {MOODS.map((mood) => (
-              <motion.button
-                key={mood}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setSelectedMood(selectedMood === mood ? null : mood)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
-                style={{
-                  background: selectedMood === mood ? 'rgba(255, 0, 255, 0.2)' : 'transparent',
-                  border: selectedMood === mood ? '1px solid var(--neon-pink)' : 'none',
-                }}
-              >
-                {mood}
+          <h3 className="text-sm opacity-70" style={{ color: 'var(--neon-pink)' }}>RECENT PRACTICE</h3>
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1">
+              {MOODS.map((mood) => (
+                <motion.button key={mood} whileTap={{ scale: 0.9 }}
+                  onClick={() => setSelectedMood(selectedMood === mood ? null : mood)}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                  style={{ background: selectedMood === mood ? 'rgba(255, 0, 255, 0.2)' : 'transparent', border: selectedMood === mood ? '1px solid var(--neon-pink)' : 'none' }}>
+                  {mood}
+                </motion.button>
+              ))}
+            </div>
+            {practiceLogs.length > 0 && (
+              <motion.button whileTap={{ scale: 0.9 }} onClick={handleClearLogs}
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ background: 'rgba(255,61,143,0.1)', border: '1px solid rgba(255,61,143,0.3)' }}
+                title="기록 초기화">
+                <Trash2 className="w-4 h-4" style={{ color: 'var(--neon-pink)' }} />
               </motion.button>
-            ))}
+            )}
           </div>
         </div>
 
+        {practiceLogs.filter((log) => !selectedMood || log.mood === selectedMood).length === 0 && (
+          <div className="text-center py-12 opacity-50 col-span-2">
+            <div className="text-5xl mb-3">🥁</div>
+            <p style={{ color: 'var(--neon-cyan)' }}>아직 연습 기록이 없어요!<br/>Beat Drop에서 연습을 시작해보세요</p>
+          </div>
+        )}
         {practiceLogs
           .filter((log) => !selectedMood || log.mood === selectedMood)
           .map((log, index) => (
