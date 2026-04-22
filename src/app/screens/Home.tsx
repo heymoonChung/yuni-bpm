@@ -81,13 +81,13 @@ export default function Home() {
             {/* Instagram-style circular photo */}
             <div className="insta-ring flex-shrink-0">
               <div className="insta-inner">
-                <img
-                  src="/yuni.jpg"
-                  alt="Yuni"
+                <video
+                  src="/yuni.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
                   className="w-16 h-16 rounded-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = 'https://api.dicebear.com/8.x/thumbs/svg?seed=yuni&backgroundColor=ff3d8f';
-                  }}
                 />
               </div>
             </div>
