@@ -5,11 +5,11 @@ import { useNavigate } from 'react-router';
 import { useTrack } from '../context/TrackContext';
 
 const CHEERING_MESSAGES = [
-  "유니야, 오늘도 즐겁게 연주해봐! 🥁",
-  "우리 딸 멋지다! 오늘도 파이팅! ✨",
-  "틀려도 괜찮아, 즐기는 게 중요해! 💖",
-  "유니의 드럼 소리 엄마가 제일 좋아해! 🎵",
-  "오늘도 한 뼘 더 성장하는 하루! 🌱"
+  "Yuni's Personal Drum Practice App 🥁",
+  "Your dedicated drum training companion 🎵",
+  "Keep the beat going, Yuni! ✨",
+  "Every great drummer started just like you! 💪",
+  "One beat at a time — you've got this! 🌟"
 ];
 
 export default function Home() {
@@ -104,8 +104,8 @@ export default function Home() {
             </div>
           </div>
 
-          <p className="text-sm mb-2 text-center" style={{ color: 'var(--neon-cyan)', textShadow: '0 0 8px var(--neon-cyan)' }}>
-            {dailyMessage.replace('유니의 드럼 소리 엄마가 제일 좋아해! 🎵', "Mom loves your drumming the most! 🎵") || "Your drum practice partner ✨"}
+          <p className="text-xs mb-2 text-center opacity-70" style={{ color: 'var(--neon-cyan)' }}>
+            {dailyMessage || "Yuni's Personal Drum Practice App 🥁"}
           </p>
         </motion.div>
 
