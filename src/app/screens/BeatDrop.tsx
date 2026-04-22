@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, RotateCcw, Repeat, Loader2 } from 'lucide-react';
+import { Play, Pause, RotateCcw, Repeat, Loader2, Volume2, VolumeX, Info } from 'lucide-react';
 import { useTrack } from '../context/TrackContext';
 import { useNavigate } from 'react-router';
 
@@ -16,6 +16,85 @@ const LANES = [
   { id: 2, name: 'Kick', color: 'var(--neon-orange)', symbol: 'KK' },
   { id: 3, name: 'Cymbal', color: 'var(--neon-green)', symbol: 'CY' },
 ];
+
+// Simple Drum Sound Generator using Web Audio API
+class DrumAudio {
+  private ctx: AudioContext | null = null;
+
+  init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  private createOscillator(freq: number, type: OscillatorType, duration: number, volume: number) {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+
+  private createNoise(duration: number, volume: number, highPass: number = 1000) {
+    if (!this.ctx) return;
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = highPass;
+
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.ctx.destination);
+
+    source.start();
+  }
+
+  playKick() {
+    this.createOscillator(150, 'sine', 0.2, 0.8);
+  }
+
+  playSnare() {
+    this.createOscillator(250, 'triangle', 0.1, 0.5);
+    this.createNoise(0.2, 0.4, 1500);
+  }
+
+  playHiHat() {
+    this.createNoise(0.05, 0.3, 5000);
+  }
+
+  playCymbal() {
+    this.createNoise(0.8, 0.2, 3000);
+  }
+}
+
+const drum = new DrumAudio();
 
 const generatePattern = (): Note[] => {
   const pattern: Note[] = [];
@@ -33,11 +112,11 @@ const generatePattern = (): Note[] => {
         pattern.push({ id: `note-${noteId++}`, lane: 1, time });
       }
 
-      if (beat % 4 === 0 || beat % 8 === 6) {
+      if (beat % 4 === 0 || (beat % 8 === 6 && bar % 2 === 1)) {
         pattern.push({ id: `note-${noteId++}`, lane: 2, time });
       }
 
-      if (beat === 0 || beat === 12) {
+      if (beat === 0 && bar % 4 === 0) {
         pattern.push({ id: `note-${noteId++}`, lane: 3, time });
       }
     }
@@ -50,37 +129,34 @@ export default function BeatDrop() {
   const { currentTrack } = useTrack();
   const navigate = useNavigate();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [bpm, setBpm] = useState(currentTrack?.bpm || 120);
   const [currentTime, setCurrentTime] = useState(0);
   const [loopEnabled, setLoopEnabled] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(true);
+  const [showGuide, setShowGuide] = useState(true);
   
-  // Finish Modal State
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [finishMood, setFinishMood] = useState<string | null>(null);
 
   const animationRef = useRef<number>();
   const lastTimeRef = useRef<number>(0);
+  const playedNotesRef = useRef<Set<string>>(new Set());
 
   const handleFinishPractice = () => {
     if (!finishMood) return;
-    
-    // Calculate practice duration (simulation)
-    const duration = Math.floor(Math.random() * 30) + 15; // 15-45 minutes
-    
+    const duration = Math.floor(Math.random() * 30) + 15;
     const todayStr = new Date().toISOString().split('T')[0];
     const newLog = {
       date: todayStr,
       mood: finishMood,
       duration,
-      notes: `${currentTrack?.title || 'Superstition'} 템포 ${bpm}에서 연습 완료!`,
+      notes: `${currentTrack?.title || '기본 트랙'} 템포 ${bpm}에서 비트 드롭 연습 완료!`,
       hasVoiceNote: false
     };
 
-    // Save to localStorage
     const existingLogs = JSON.parse(localStorage.getItem('yuni_practice_logs') || '[]');
-    // Replace if same date exists or append
     const updatedLogs = existingLogs.filter((log: any) => log.date !== todayStr);
     updatedLogs.push(newLog);
     localStorage.setItem('yuni_practice_logs', JSON.stringify(updatedLogs));
@@ -90,40 +166,49 @@ export default function BeatDrop() {
   };
 
   useEffect(() => {
-    // Simulate fetching BPM and Onset data from server
     const fetchOnsetSimulation = async () => {
       setIsAnalyzing(true);
-      /*
-      // Real implementation would look like:
-      const res = await fetch(`https://api.yunibpm.com/analyze?title=${currentTrack?.title}`);
-      const data = await res.json();
-      setNotes(data.notes);
-      setBpm(data.bpm);
-      */
-      
-      // Simulation delay
       setTimeout(() => {
         setNotes(generatePattern());
         setBpm(currentTrack?.bpm || 120);
         setIsAnalyzing(false);
       }, 1500);
     };
-
     fetchOnsetSimulation();
   }, [currentTrack]);
 
+  // Audio Playback Sync
+  useEffect(() => {
+    if (isPlaying && !isMuted) {
+      const hitLineTime = currentTime;
+      notes.forEach(note => {
+        // Play sound if note hits the hit-line (with small tolerance)
+        if (note.time <= hitLineTime && !playedNotesRef.current.has(note.id)) {
+          playedNotesRef.current.add(note.id);
+          if (note.lane === 0) drum.playHiHat();
+          if (note.lane === 1) drum.playSnare();
+          if (note.lane === 2) drum.playKick();
+          if (note.lane === 3) drum.playCymbal();
+        }
+      });
+    }
+  }, [currentTime, isPlaying, isMuted, notes]);
+
   useEffect(() => {
     if (isPlaying) {
+      drum.init();
       const animate = (timestamp: number) => {
         if (!lastTimeRef.current) lastTimeRef.current = timestamp;
         const deltaTime = timestamp - lastTimeRef.current;
 
         const beatsPerSecond = bpm / 60;
+        // Speed up factor to match visual window
         const increment = (deltaTime / 1000) * beatsPerSecond * 4;
 
         setCurrentTime((prev) => {
           const newTime = prev + increment;
           if (newTime >= 128) {
+            playedNotesRef.current.clear();
             return loopEnabled ? 0 : 128;
           }
           return newTime;
@@ -135,22 +220,19 @@ export default function BeatDrop() {
 
       animationRef.current = requestAnimationFrame(animate);
     } else {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
       lastTimeRef.current = 0;
     }
 
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [isPlaying, bpm, loopEnabled]);
 
   const handleReset = () => {
     setCurrentTime(0);
     setIsPlaying(false);
+    playedNotesRef.current.clear();
   };
 
   const getVisibleNotes = () => {
@@ -167,25 +249,68 @@ export default function BeatDrop() {
       <div className="h-screen flex flex-col items-center justify-center space-y-6">
         <Loader2 className="w-16 h-16 animate-spin" style={{ color: 'var(--neon-pink)' }} />
         <div className="text-xl" style={{ color: 'var(--neon-pink)', fontWeight: 'var(--font-weight-medium)' }}>
-          오디오 비트 및 온셋(Onset) 분석 중...
+          유니를 위한 비트 분석 중... 🥁
         </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex flex-col landscape:flex-row">
+    <div className="h-screen flex flex-col landscape:flex-row relative">
+      {/* Tutorial Guide */}
+      <AnimatePresence>
+        {showGuide && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+            onClick={() => setShowGuide(false)}
+          >
+            <div className="max-w-md space-y-6 text-center">
+              <div className="w-20 h-20 bg-pink-500/20 rounded-full flex items-center justify-center mx-auto border-2 border-pink-500 shadow-[0_0_20px_var(--neon-pink)]">
+                <Play className="w-10 h-10 text-pink-500" />
+              </div>
+              <h3 className="text-3xl font-bold" style={{ color: 'var(--neon-pink)' }}>Beat Drop 가이드</h3>
+              <p className="text-lg leading-relaxed opacity-90">
+                위에서 떨어지는 노트가 하얀색 <span className="text-white font-bold">판정선</span>에 닿을 때 맞춰서 드럼을 쳐보세요! 🥁
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className="block text-xl mb-1">HH</span> 하이햇 (박자)
+                </div>
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className="block text-xl mb-1">SN</span> 스네어 (왼손)
+                </div>
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className="block text-xl mb-1">KK</span> 킥 (발)
+                </div>
+                <div className="p-3 rounded-xl bg-white/5 border border-white/10">
+                  <span className="block text-xl mb-1">CY</span> 심벌 (포인트)
+                </div>
+              </div>
+              <button className="px-8 py-3 rounded-full bg-pink-500 font-bold text-lg shadow-lg">알겠어, 시작할래!</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="px-4 py-6 flex-shrink-0 landscape:w-1/3 landscape:flex landscape:flex-col landscape:justify-center">
-        <h2
-          className="text-2xl mb-2"
-          style={{
-            color: 'var(--neon-pink)',
-            fontWeight: 'var(--font-weight-medium)',
-            textShadow: '0 0 10px var(--neon-pink)',
-          }}
-        >
-          Beat Drop
-        </h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2
+            className="text-2xl"
+            style={{
+              color: 'var(--neon-pink)',
+              fontWeight: 'var(--font-weight-medium)',
+              textShadow: '0 0 10px var(--neon-pink)',
+            }}
+          >
+            Beat Drop
+          </h2>
+          <button onClick={() => setShowGuide(true)} className="opacity-50 hover:opacity-100 transition-opacity">
+            <Info className="w-5 h-5" />
+          </button>
+        </div>
         <div className="flex items-center justify-between">
           <div className="text-sm opacity-70" style={{ color: 'var(--neon-cyan)' }}>
             {currentTrack?.title || 'Superstition'} - {currentTrack?.artist || 'Stevie Wonder'}
@@ -293,34 +418,31 @@ export default function BeatDrop() {
 
           <motion.button
             whileTap={{ scale: 0.95 }}
-            onClick={handleReset}
-            className="w-16 h-16 rounded-2xl flex items-center justify-center"
+            onClick={() => setIsMuted(!isMuted)}
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
             style={{
-              background: 'rgba(95, 251, 241, 0.1)',
-              border: '2px solid var(--neon-cyan)',
+              background: isMuted ? 'rgba(255,255,255,0.05)' : 'rgba(95, 251, 241, 0.1)',
+              border: '1px solid var(--neon-cyan)',
             }}
           >
-            <RotateCcw className="w-6 h-6" style={{ color: 'var(--neon-cyan)' }} />
+            {isMuted ? <VolumeX className="w-5 h-5 text-gray-500" /> : <Volume2 className="w-5 h-5" style={{ color: 'var(--neon-cyan)' }} />}
           </motion.button>
 
           <motion.button
             whileTap={{ scale: 0.95 }}
-            onClick={() => setLoopEnabled(!loopEnabled)}
-            className="w-16 h-16 rounded-2xl flex items-center justify-center"
+            onClick={handleReset}
+            className="w-12 h-12 rounded-xl flex items-center justify-center"
             style={{
-              background: loopEnabled
-                ? 'rgba(0, 255, 136, 0.2)'
-                : 'rgba(0, 255, 136, 0.05)',
-              border: `2px solid ${loopEnabled ? 'var(--neon-green)' : 'rgba(0, 255, 136, 0.3)'}`,
-              boxShadow: loopEnabled ? '0 0 15px var(--neon-green)' : 'none',
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.2)',
             }}
           >
-            <Repeat className="w-6 h-6" style={{ color: 'var(--neon-green)' }} />
+            <RotateCcw className="w-5 h-5 opacity-60" />
           </motion.button>
 
           <div className="flex-1 text-right">
-            <div className="text-xs opacity-60 mb-1" style={{ color: 'var(--neon-cyan)' }}>
-              Tempo
+            <div className="text-[10px] opacity-60 mb-1" style={{ color: 'var(--neon-cyan)' }}>
+              Tempo {bpm}
             </div>
             <input
               type="range"
@@ -336,22 +458,6 @@ export default function BeatDrop() {
           </div>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
-          {LANES.map((lane) => (
-            <div
-              key={lane.id}
-              className="text-center py-2 rounded-lg text-xs"
-              style={{
-                background: `${lane.color}10`,
-                color: lane.color,
-                border: `1px solid ${lane.color}30`,
-              }}
-            >
-              {lane.name}
-            </div>
-          ))}
-        </div>
-        
         <motion.button
           whileTap={{ scale: 0.98 }}
           onClick={() => setShowFinishModal(true)}
@@ -371,7 +477,7 @@ export default function BeatDrop() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
