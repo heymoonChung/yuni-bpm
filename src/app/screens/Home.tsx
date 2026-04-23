@@ -48,16 +48,22 @@ export default function Home() {
         }
       }
       
+      const lastLogWithTrack = [...logs].sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.date).getTime();
+        const timeB = new Date(b.timestamp || b.date).getTime();
+        return timeB - timeA;
+      }).find(log => log.track);
+
+      // Restore currentTrack if null
+      if (!currentTrack && lastLogWithTrack) {
+        setCurrentTrack(lastLogWithTrack.track);
+      }
+
       const lastLog = [...logs].sort((a, b) => {
         const timeA = new Date(a.timestamp || a.date).getTime();
         const timeB = new Date(b.timestamp || b.date).getTime();
         return timeB - timeA;
       })[0];
-
-      // Restore currentTrack if null
-      if (!currentTrack && lastLog.track) {
-        setCurrentTrack(lastLog.track);
-      }
 
       setStats({ 
         streak, 

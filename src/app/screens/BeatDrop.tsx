@@ -175,12 +175,18 @@ export default function BeatDrop() {
     if (location.state?.continue && screen === 'input') {
       const logs = JSON.parse(localStorage.getItem('yuni_practice_logs') || '[]');
       if (logs.length > 0) {
-        const lastLog = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        if (lastLog.track) {
-          setVideoId(lastLog.track.videoId);
-          setVideoTitle(lastLog.track.title);
-          if (lastLog.track.bpm) setBpm(lastLog.track.bpm);
-          setCurrentTrack(lastLog.track);
+        const lastLogWithTrack = [...logs].sort((a, b) => {
+          const timeA = new Date(a.timestamp || a.date).getTime();
+          const timeB = new Date(b.timestamp || b.date).getTime();
+          return timeB - timeA;
+        }).find(log => log.track);
+
+        if (lastLogWithTrack && lastLogWithTrack.track) {
+          const track = lastLogWithTrack.track;
+          setVideoId(track.videoId);
+          setVideoTitle(track.title);
+          if (track.bpm) setBpm(track.bpm);
+          setCurrentTrack(track);
           setScreen('player');
           setPlaying(true);
         }
