@@ -209,7 +209,6 @@ export default function BeatDrop() {
     setIsSearching(true); setUrlError(''); synth.unlock();
     const query = encodeURIComponent(searchQuery);
 
-    // 1. Local try
     try {
       const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
       if (res.ok) {
@@ -218,24 +217,12 @@ export default function BeatDrop() {
       }
     } catch {}
 
-    // 2. Strong proxy fallback
     const apiBases = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee', 'https://piped-api.garudalinux.org'];
     for (const base of apiBases) {
       try {
-        const res = await fetch(`${base}/search?q=${query}&filter=all`); // Direct fetch often has CORS
+        const res = await fetch(`${base}/search?q=${query}&filter=all`);
         if (res.ok) {
           const data = await res.json();
-          const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
-            id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
-            title: i.title, artist: i.uploaderName || 'YouTube'
-          })).filter((r: any) => r.id && r.id.length === 11);
-          if (items.length > 0) { setSearchResults(items); setIsSearching(false); return; }
-        }
-        // Fallback to proxy if direct fails
-        const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(`${base}/search?q=${query}&filter=all`)}`);
-        if (proxyRes.ok) {
-          const wrapper = await proxyRes.json();
-          const data = JSON.parse(wrapper.contents);
           const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
             id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
             title: i.title, artist: i.uploaderName || 'YouTube'
@@ -257,12 +244,6 @@ export default function BeatDrop() {
     setVideoTitle(title); setVideoId(id);
     setCurrentTrack({ title, artist: 'YouTube', bpm, videoId: id });
     setLoadingTitle(false); setScreen('player'); setPlaying(true);
-  };
-
-  const handleRandomPlay = () => {
-    synth.unlock();
-    const s = RANDOM_SONGS[Math.floor(Math.random() * RANDOM_SONGS.length)];
-    setVideoId(s.id); setVideoTitle(s.title); setScreen('player'); setPlaying(true);
   };
 
   const togglePlay = () => {
@@ -287,22 +268,21 @@ export default function BeatDrop() {
   const hitLine = 82;
 
   // ══════════════════════════════════════════════════════════════════════
-  // UI: Input (Exact match to User Screenshot)
+  // UI: Input (Exact match to Screenshot)
   // ══════════════════════════════════════════════════════════════════════
   if (screen === 'input') {
     return (
       <div className="h-screen flex flex-col items-center justify-center p-6 gap-8 bg-[#0D0D0D]">
         <div className="text-center space-y-4">
-          <div className="w-24 h-24 rounded-3xl flex items-center justify-center mx-auto"
-            style={{ background: 'linear-gradient(135deg, #FF00FF, #00FFFF)', boxShadow: '0 0 30px rgba(255,0,255,0.4)' }}>
-            <Music className="w-12 h-12 text-white" />
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto"
+            style={{ background: 'linear-gradient(135deg, var(--neon-pink), var(--neon-cyan))', boxShadow: '0 0 30px var(--neon-pink)' }}>
+            <Music className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-4xl font-black italic tracking-tighter" style={{ background: 'linear-gradient(to bottom, #FFFFFF, #FF00FF)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Beat Drop</h1>
-          <p className="text-sm font-medium opacity-70 text-white">원하는 곡에 맞춰 드럼을 연습해보세요!</p>
+          <h1 className="text-3xl font-bold" style={{ color: 'var(--neon-pink)', textShadow: '0 0 15px var(--neon-pink)' }}>Beat Drop</h1>
+          <p className="text-sm opacity-70 text-white">원하는 곡에 맞춰 드럼을 연습해보세요!</p>
         </div>
 
         <div className="w-full max-w-sm space-y-6">
-          {/* Tabs - Exact Screenshot Design */}
           <div className="flex gap-1 p-1 rounded-2xl bg-[#1A1C22]">
             <button onClick={() => setInputMode('search')} className="flex-1 py-3 text-sm font-bold rounded-xl transition-all"
               style={{ background: inputMode === 'search' ? '#2A2D35' : 'transparent', color: inputMode === 'search' ? '#5FFBF1' : '#FFFFFF' }}>유튜브 검색</button>
@@ -342,16 +322,14 @@ export default function BeatDrop() {
           )}
 
           <div className="space-y-2">
-            <div className="flex justify-between text-xs font-bold"><span className="text-white opacity-60">빠르기 (BPM)</span><span className="text-[#FF00FF]">{bpm}</span></div>
+            <div className="flex justify-between text-xs font-bold"><span className="text-white opacity-60">빠르기 (BPM)</span><span className="text-pink-500">{bpm}</span></div>
             <input type="range" min="60" max="200" value={bpm} onChange={e => setBpm(Number(e.target.value))} className="w-full h-1 accent-[#FF00FF]" />
           </div>
 
-          <button onClick={inputMode === 'search' ? handleSearch : handleSubmitUrl} className="w-full py-5 rounded-2xl font-black text-xl text-white flex items-center justify-center gap-2 transition-transform active:scale-95"
+          <button onClick={inputMode === 'search' ? handleSearch : handleSubmitUrl} className="w-full py-5 rounded-2xl font-bold text-xl text-white flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(90deg, #FF00FF, #48A9FE)', boxShadow: '0 0 25px rgba(255,0,255,0.4)' }}>
             시작하기 <ArrowRight className="w-6 h-6" />
           </button>
-          
-          <button className="w-full text-xs opacity-40 text-white underline" onClick={handleRandomPlay}>랜덤 곡으로 자유 연습하기</button>
         </div>
       </div>
     );
@@ -376,7 +354,7 @@ export default function BeatDrop() {
         <div className="absolute inset-0 grid grid-cols-4">
           {LANES.map(lane => (
             <div key={lane.id} className="relative flex flex-col border-l border-white/5">
-              <div className="absolute top-4 left-1/2 -translate-x-1/2 text-[11px] font-black px-2 py-0.5 rounded-full z-10" style={{ background: `${lane.color}25`, color: lane.color }}>{lane.symbol}</div>
+              <div className="absolute top-4 left-1/2 -translate-x-1/2 text-[11px] font-bold px-2 py-0.5 rounded-full z-10" style={{ background: `${lane.color}25`, color: lane.color }}>{lane.symbol}</div>
               <AnimatePresence>
                 {notes.filter(n => n.lane === lane.id && n.time >= currentTime && n.time < currentTime + 32).map(note => {
                   const pct = ((note.time - currentTime) / 32) * 100;
@@ -406,20 +384,20 @@ export default function BeatDrop() {
         </div>
         <div className="flex items-center gap-4">
           <input type="range" min="60" max="200" value={bpm} onChange={e => setBpm(Number(e.target.value))} className="flex-1 h-1 accent-[#FF00FF]" />
-          <div className="text-sm font-black text-[#FF00FF] w-16">{bpm} BPM</div>
+          <div className="text-sm font-bold text-[#FF00FF] w-16">{bpm} BPM</div>
         </div>
-        <button onClick={() => setShowFinishModal(true)} className="w-full py-4 rounded-2xl font-black text-white" style={{ background: 'linear-gradient(90deg, #00FFFF, #00FF88)', boxShadow: '0 0 20px rgba(0,255,255,0.3)' }}>연습 종료 및 기록하기</button>
+        <button onClick={() => setShowFinishModal(true)} className="w-full py-4 rounded-2xl font-bold text-white" style={{ background: 'linear-gradient(90deg, #00FFFF, #00FF88)', boxShadow: '0 0 20px rgba(0,255,255,0.3)' }}>연습 종료 및 기록하기</button>
       </div>
 
       <AnimatePresence>
         {showFinishModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-xl">
             <div className="w-full max-w-sm rounded-[40px] p-10 space-y-8 bg-[#15171C] border border-white/10">
-              <h3 className="text-3xl font-black text-center text-[#FF00FF]">오늘 연습 어땠어?</h3>
+              <h3 className="text-2xl font-bold text-center text-[#FF00FF]">오늘 연습 어땠어?</h3>
               <div className="flex justify-center gap-4 text-5xl">
-                {['😊', '😎', '🔥', '😅'].map(m => (<button key={m} onClick={() => setFinishMood(m)} className="transition-transform active:scale-75" style={{ filter: finishMood === m ? 'none' : 'grayscale(100%) opacity(40%)' }}>{m}</button>))}
+                {['😊', '😎', '🔥', '😅'].map(m => (<button key={m} onClick={() => setFinishMood(m)} className="active:scale-75" style={{ filter: finishMood === m ? 'none' : 'grayscale(100%) opacity(40%)' }}>{m}</button>))}
               </div>
-              <button onClick={handleFinish} disabled={!finishMood} className="w-full py-5 rounded-2xl font-black text-xl text-white disabled:opacity-40" style={{ background: '#FF00FF', boxShadow: '0 0 25px rgba(255,0,255,0.4)' }}>저장하기</button>
+              <button onClick={handleFinish} disabled={!finishMood} className="w-full py-5 rounded-2xl font-bold text-xl text-white disabled:opacity-40" style={{ background: '#FF00FF', boxShadow: '0 0 25px rgba(255,0,255,0.4)' }}>저장하기</button>
             </div>
           </motion.div>
         )}
