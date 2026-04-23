@@ -212,8 +212,14 @@ export default function BeatDrop() {
       },
       events: {
         onStateChange: (e: any) => {
-          // YT.PlayerState.PLAYING = 1
-          setYtPlaying(e.data === 1);
+          // YT.PlayerState.PLAYING = 1, PAUSED = 2, ENDED = 0
+          if (e.data === 1) {
+            setYtPlaying(true);
+            setDrumPlaying(true); // 유튜브 재생 시 드럼도 시작
+          } else if (e.data === 2 || e.data === 0) {
+            setYtPlaying(false);
+            setDrumPlaying(false); // 유튜브 정지 시 드럼도 정지
+          }
         },
       },
     });
@@ -279,6 +285,7 @@ export default function BeatDrop() {
     setVideoId(id);
     setCurrentTrack({ title, artist: 'YouTube', bpm, videoId: id });
     setLoadingTitle(false);
+    setDrumPlaying(true); // 즉시 재생 시작
     setScreen('player');
   }, [urlInput, bpm, setCurrentTrack]);
 
@@ -356,6 +363,7 @@ export default function BeatDrop() {
     setVideoId(song.id);
     setVideoTitle(song.title);
     setCurrentTrack({ title: song.title, artist: song.artist, bpm, videoId: song.id });
+    setDrumPlaying(true); // 즉시 재생 시작
     setScreen('player');
   };
 
@@ -369,8 +377,18 @@ export default function BeatDrop() {
 
   const toggleDrum = () => {
     synth.unlock();
-    setDrumPlaying(p => !p);
-    if (!drumPlaying) playedRef.current.clear();
+    const newState = !drumPlaying;
+    setDrumPlaying(newState);
+    
+    // 유튜브 플레이어와 동기화
+    if (ytPlayerRef.current) {
+      try {
+        if (newState) ytPlayerRef.current.playVideo();
+        else ytPlayerRef.current.pauseVideo();
+      } catch (e) {}
+    }
+    
+    if (!newState) playedRef.current.clear();
   };
 
   const handleReset = () => {
