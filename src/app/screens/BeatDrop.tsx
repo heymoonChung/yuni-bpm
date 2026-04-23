@@ -287,62 +287,47 @@ export default function BeatDrop() {
     setIsSearching(true);
     setUrlError('');
 
-    // Strategy 1: yt.lemnoslife.com — YouTube Data API proxy (no key needed)
-    const tryLemnoslife = async (): Promise<{id: string, title: string, artist: string}[] | null> => {
-      try {
-        const res = await fetch(
-          `https://yt.lemnoslife.com/noKey/search?part=snippet&q=${encodeURIComponent(searchQuery)}&type=video&maxResults=8`,
-          { signal: AbortSignal.timeout(6000) }
-        );
-        if (!res.ok) return null;
-        const data = await res.json();
-        const items = data.items || [];
-        const results = items.map((item: any) => ({
-          id: item.id?.videoId || '',
-          title: item.snippet?.title || '(제목 없음)',
-          artist: item.snippet?.channelTitle || 'YouTube',
-        })).filter((r: any) => r.id.length === 11);
-        return results.length > 0 ? results : null;
-      } catch {
-        return null;
-      }
-    };
-
-    // Strategy 2: Invidious instances
-    const INVIDIOUS = [
-      'https://invidious.nerdvpn.de',
-      'https://invidious.privacyredirect.com',
-      'https://inv.tux.pizza',
+    // List of Piped API instances
+    const instances = [
+      'https://api.piped.private.coffee',
+      'https://pipedapi.kavin.rocks', // Fallback
+      'https://piped-api.garudalinux.org'
     ];
-    const tryInvidious = async (): Promise<{id: string, title: string, artist: string}[] | null> => {
-      for (const host of INVIDIOUS) {
-        try {
-          const res = await fetch(
-            `${host}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&page=1`,
-            { signal: AbortSignal.timeout(5000) }
-          );
-          if (!res.ok) continue;
-          const data = await res.json();
-          const items = Array.isArray(data) ? data : [];
-          const results = items.slice(0, 6).map((item: any) => ({
-            id: item.videoId || '',
-            title: item.title || '(제목 없음)',
-            artist: item.author || 'YouTube',
-          })).filter((r: any) => r.id.length === 11);
-          if (results.length > 0) return results;
-        } catch {
-          continue;
+
+    let success = false;
+    for (const apiBase of instances) {
+      try {
+        // Use CORS proxy to bypass browser restrictions
+        const targetUrl = `${apiBase}/search?q=${encodeURIComponent(searchQuery)}&filter=all`;
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(7000) });
+        if (!res.ok) continue;
+
+        const data = await res.json();
+        const items = (data.items || []).filter((i: any) => i.type === 'stream');
+
+        if (items.length > 0) {
+          const results = items.slice(0, 7).map((i: any) => ({
+            id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
+            title: i.title,
+            artist: i.uploaderName || 'YouTube'
+          })).filter((r: any) => r.id && r.id.length === 11);
+
+          if (results.length > 0) {
+            setSearchResults(results);
+            success = true;
+            break;
+          }
         }
+      } catch (e) {
+        console.error(`Search failed with ${apiBase}:`, e);
+        continue;
       }
-      return null;
-    };
+    }
 
-    const found = await tryLemnoslife() ?? await tryInvidious();
-
-    if (found && found.length > 0) {
-      setSearchResults(found);
-    } else {
-      setUrlError('검색에 실패했습니다. 유튜브 링크를 직접 붙여넣기 해주세요.');
+    if (!success) {
+      setUrlError('검색 서버가 혼잡합니다. 잠시 후 다시 시도하거나 유튜브 링크를 직접 붙여넣어 주세요.');
     }
     setIsSearching(false);
   };
