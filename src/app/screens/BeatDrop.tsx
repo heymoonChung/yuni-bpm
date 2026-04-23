@@ -299,19 +299,53 @@ export default function BeatDrop() {
   if (screen === 'input') {
     return (
       <div className="h-screen flex flex-col items-center justify-center p-6 gap-8 bg-[#0D0D0D]">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-6">
           <style>{`
             @keyframes neon-pulse {
               0%, 100% { text-shadow: 0 0 20px var(--neon-pink), 0 0 40px var(--neon-pink); }
               50% { text-shadow: 0 0 30px var(--neon-pink), 0 0 60px var(--neon-pink), 0 0 80px var(--neon-pink); }
             }
+            @keyframes spin-border {
+              0%   { background-position: 0% 50%; }
+              50%  { background-position: 100% 50%; }
+              100% { background-position: 0% 50%; }
+            }
             .yuni-neon-title {
               animation: neon-pulse 2s ease-in-out infinite;
             }
+            .insta-ring {
+              background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888, #5ffbf1, #ff3d8f);
+              background-size: 300% 300%;
+              animation: spin-border 3s ease infinite;
+              border-radius: 50%;
+              padding: 3px;
+            }
+            .insta-inner {
+              background: #0D0D0D;
+              border-radius: 50%;
+              padding: 2px;
+            }
           `}</style>
-          <h1 className="text-6xl font-black tracking-tighter yuni-neon-title" style={{ color: 'var(--neon-pink)' }}>YUNI.BPM</h1>
-          <h2 className="text-xl font-bold tracking-[0.3em]" style={{ color: 'var(--neon-cyan)', textShadow: '0 0 15px var(--neon-cyan)' }}>DRUM PRACTICE APP</h2>
-          <p className="text-sm opacity-40 text-white pt-4">Yuni's personal practice companion</p>
+          
+          <div className="flex items-center gap-4 mb-4">
+            <div className="insta-ring flex-shrink-0">
+              <div className="insta-inner">
+                <video
+                  src="/yuni.mp4"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="w-16 h-16 rounded-full object-cover"
+                />
+              </div>
+            </div>
+            <div className="text-left">
+              <h1 className="text-4xl font-black tracking-tighter yuni-neon-title" style={{ color: 'var(--neon-pink)' }}>YUNI.BPM</h1>
+              <p className="text-[10px] opacity-80" style={{ color: 'var(--neon-pink)' }}>Mom loves your drumming the most! 💖</p>
+              <h2 className="text-sm font-bold tracking-[0.2em] mt-1" style={{ color: 'var(--neon-cyan)' }}>DRUM PRACTICE APP</h2>
+            </div>
+          </div>
         </div>
         <div className="w-full max-w-sm space-y-6">
           <div className="flex gap-2 p-1.5 rounded-full bg-[#1A1C22] border border-white/5">
