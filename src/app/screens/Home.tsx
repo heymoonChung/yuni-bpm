@@ -27,28 +27,33 @@ export default function Home() {
     // Calculate real stats from logs
     const logs = JSON.parse(localStorage.getItem('yuni_practice_logs') || '[]');
     if (logs.length > 0) {
-      const sortedLogs = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      const total = logs.reduce((sum: number, log: any) => sum + (log.duration || 0), 0);
+      // 1. Total Minutes
+      const total = logs.reduce((sum: number, log: any) => sum + (Number(log.duration) || 0), 0);
+      
+      // 2. Streak Calculation (Strictly by date)
+      const dates = [...new Set(logs.map((l: any) => l.date))].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
       
       let streak = 0;
       const today = new Date().toISOString().split('T')[0];
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       
-      let lastDate = sortedLogs[0].date;
-      if (lastDate === today || lastDate === yesterday) {
+      if (dates[0] === today || dates[0] === yesterday) {
         streak = 1;
-        for (let i = 1; i < sortedLogs.length; i++) {
-          const d1 = new Date(sortedLogs[i-1].date);
-          const d2 = new Date(sortedLogs[i].date);
-          const diff = (d1.getTime() - d2.getTime()) / 86400000;
-          if (diff <= 1.1) {
-            streak++;
-          } else {
-            break;
-          }
+        for (let i = 0; i < dates.length - 1; i++) {
+          const d1 = new Date(dates[i]);
+          const d2 = new Date(dates[i+1]);
+          const diffDays = Math.round((d1.getTime() - d2.getTime()) / 86400000);
+          if (diffDays === 1) streak++;
+          else break;
         }
       }
-      setStats({ streak, totalMinutes: total, lastDuration: sortedLogs[0].duration || 0 });
+      
+      const lastLog = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      setStats({ 
+        streak, 
+        totalMinutes: total, 
+        lastDuration: lastLog.duration || 0 
+      });
     }
   }, []);
 
