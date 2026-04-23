@@ -14,7 +14,7 @@ const CHEERING_MESSAGES = [
 
 export default function Home() {
   const navigate = useNavigate();
-  const { currentTrack } = useTrack();
+  const { currentTrack, setCurrentTrack } = useTrack();
   const [stats, setStats] = useState({ streak: 0, totalMinutes: 0, lastDuration: 0 });
   const [dailyMessage, setDailyMessage] = useState("");
 
@@ -48,7 +48,17 @@ export default function Home() {
         }
       }
       
-      const lastLog = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+      const lastLog = [...logs].sort((a, b) => {
+        const timeA = new Date(a.timestamp || a.date).getTime();
+        const timeB = new Date(b.timestamp || b.date).getTime();
+        return timeB - timeA;
+      })[0];
+
+      // Restore currentTrack if null
+      if (!currentTrack && lastLog.track) {
+        setCurrentTrack(lastLog.track);
+      }
+
       setStats({ 
         streak, 
         totalMinutes: total, 

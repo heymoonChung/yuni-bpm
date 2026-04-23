@@ -130,6 +130,7 @@ export default function BeatDrop() {
   const [notes] = useState<Note[]>(generatePattern);
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [finishMood, setFinishMood] = useState<string | null>(null);
+  const [startTime, setStartTime] = useState<number | null>(null);
 
   const ytPlayerRef = useRef<any>(null);
   const ytPlayerContainerRef = useRef<HTMLDivElement>(null);
@@ -147,6 +148,10 @@ export default function BeatDrop() {
 
   useEffect(() => {
     if (!ytReady || !videoId || screen !== 'player' || !ytPlayerContainerRef.current) return;
+    
+    // Set start time when player screen is loaded
+    if (!startTime) setStartTime(Date.now());
+
     if (ytPlayerRef.current) { try { ytPlayerRef.current.destroy(); } catch {} ytPlayerRef.current = null; }
     ytPlayerContainerRef.current.innerHTML = '';
     const playerDiv = document.createElement('div');
@@ -164,6 +169,24 @@ export default function BeatDrop() {
       }
     });
   }, [ytReady, videoId, screen]);
+
+  // Handle continue state from Home
+  useEffect(() => {
+    if (location.state?.continue && screen === 'input') {
+      const logs = JSON.parse(localStorage.getItem('yuni_practice_logs') || '[]');
+      if (logs.length > 0) {
+        const lastLog = [...logs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+        if (lastLog.track) {
+          setVideoId(lastLog.track.videoId);
+          setVideoTitle(lastLog.track.title);
+          if (lastLog.track.bpm) setBpm(lastLog.track.bpm);
+          setCurrentTrack(lastLog.track);
+          setScreen('player');
+          setPlaying(true);
+        }
+      }
+    }
+  }, [location.state, screen, setCurrentTrack]);
 
   const lastBeatRef = useRef<number>(0);
   useEffect(() => {
@@ -313,10 +336,26 @@ export default function BeatDrop() {
 
   const handleFinish = () => {
     if (!finishMood) return;
-    const log = { date: new Date().toISOString().split('T')[0], mood: finishMood, duration: 15, notes: `${videoTitle} 완료!`, hasVoiceNote: false };
+    
+    // Calculate actual duration in minutes
+    const endTime = Date.now();
+    const durationMs = startTime ? endTime - startTime : 0;
+    const durationMinutes = Math.max(1, Math.round(durationMs / 60000));
+
+    const log = { 
+      date: new Date().toISOString().split('T')[0], 
+      timestamp: new Date().toISOString(),
+      mood: finishMood, 
+      duration: durationMinutes, 
+      notes: `${videoTitle} 완료!`, 
+      hasVoiceNote: false,
+      track: currentTrack
+    };
     const ex = JSON.parse(localStorage.getItem('yuni_practice_logs') || '[]');
     localStorage.setItem('yuni_practice_logs', JSON.stringify([...ex, log]));
-    setShowFinishModal(false); navigate('/progress');
+    setShowFinishModal(false); 
+    setStartTime(null);
+    navigate('/progress');
   };
 
   const hitLine = 82;

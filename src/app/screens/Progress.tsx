@@ -20,7 +20,14 @@ export default function Progress() {
   useEffect(() => {
     const savedLogs = localStorage.getItem('yuni_practice_logs');
     if (savedLogs) {
-      setPracticeLogs(JSON.parse(savedLogs));
+      const logs = JSON.parse(savedLogs);
+      // Sort by date/timestamp descending (newest first)
+      logs.sort((a: any, b: any) => {
+        const timeA = new Date(a.timestamp || a.date).getTime();
+        const timeB = new Date(b.timestamp || b.date).getTime();
+        return timeB - timeA;
+      });
+      setPracticeLogs(logs);
     }
   }, []);
 
@@ -273,7 +280,19 @@ export default function Progress() {
           Keep Going, Yuni!
         </div>
         <p className="text-sm opacity-70" style={{ color: 'var(--foreground)' }}>
-          이번 주 4일 연습 완료! 목표까지 3일 남았어요
+          {(() => {
+            const now = new Date();
+            const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay()));
+            startOfWeek.setHours(0, 0, 0, 0);
+            
+            const practicedDaysThisWeek = new Set(
+              practiceLogs
+                .filter(log => new Date(log.date).getTime() >= startOfWeek.getTime())
+                .map(log => log.date)
+            ).size;
+            
+            return `이번 주 ${practicedDaysThisWeek}일 연습 완료! ${practicedDaysThisWeek >= 7 ? '대단해요, 유니!' : `목표까지 ${7 - practicedDaysThisWeek}일 남았어요`}`;
+          })()}
         </p>
       </motion.div>
     </div>
