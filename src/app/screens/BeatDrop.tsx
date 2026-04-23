@@ -34,7 +34,8 @@ const RANDOM_SONGS = [
   { id: 'L_XJ_s5IsQc', title: 'Snarky Puppy - Lingus (Modern Technical)' },
   { id: 'Y7vG-ZqA4Z4', title: 'Dave Weckl - Festival de Ritmos (Rudiments)' },
   { id: 'I2PpgWh5n94', title: 'Vulfpeck - It Gets Funkier (Pocket Groove)' },
-  { id: '6vY8rZ_xV-8', title: 'Dirty Loops - Coffee Break (Technical Pop)' }
+  { id: '6vY8rZ_xV-8', title: 'Dirty Loops - Coffee Break (Technical Pop)' },
+  { id: 'qN4ooNx77u0', title: 'Harry Styles - Sign of the Times (Rock Ballad)' }
 ];
 
 // ── YouTube Helpers ────────────────────────────────────────────────────────
