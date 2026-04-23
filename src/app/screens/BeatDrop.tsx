@@ -224,17 +224,24 @@ export default function BeatDrop() {
     setIsSearching(true); setUrlError(''); synth.unlock();
     const searchPromise = (async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/search?q=${searchQuery}`);
+        const query = encodeURIComponent(searchQuery);
+        const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
         if (res.ok) {
           const data = await res.json();
           if (data.length > 0) return data.slice(0, 8);
         }
       } catch {}
       
-      const apiBases = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee', 'https://piped-api.garudalinux.org'];
+      const apiBases = [
+        'https://pipedapi.kavin.rocks', 
+        'https://piped-api.lunar.icu', 
+        'https://api-piped.mha.fi', 
+        'https://pipedapi.rivo.cc'
+      ];
+      const query = encodeURIComponent(searchQuery);
       for (const base of apiBases) {
         try {
-          const res = await fetch(`${base}/search?q=${searchQuery}&filter=all`);
+          const res = await fetch(`${base}/search?q=${query}&filter=all`);
           if (res.ok) {
             const data = await res.json();
             const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
