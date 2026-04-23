@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, Pause, RotateCcw, Loader2, Volume2, VolumeX, Link, Music, ArrowRight } from 'lucide-react';
+import { Play, Pause, RotateCcw, Loader2, Volume2, VolumeX, Link, Music, ArrowRight, Search, Youtube } from 'lucide-react';
 import { useTrack } from '../context/TrackContext';
 import { useNavigate } from 'react-router';
 
@@ -24,6 +24,17 @@ const LANES = [
   { id: 1, name: 'Snare',  color: 'var(--neon-pink)', symbol: 'SN' },
   { id: 2, name: 'Kick',   color: 'var(--neon-orange)', symbol: 'KK' },
   { id: 3, name: 'Cymbal', color: 'var(--neon-green)', symbol: 'CY' },
+];
+
+const RANDOM_SONGS = [
+  { id: 'IHNzEQiEino', title: 'NewJeans (뉴진스) - Hype Boy' },
+  { id: 'd9IxdwEFk1c', title: 'IVE (아이브) - LOVE DIVE' },
+  { id: '11cta61wi0g', title: 'LE SSERAFIM (르세라핌) - ANTIFRAGILE' },
+  { id: 'T2wBbB-gcBw', title: 'aespa (에스파) - Next Level' },
+  { id: 'pSUydWEqKwE', title: 'STAYC (스테이씨) - Teddy Bear' },
+  { id: 'AwwleMEyBsY', title: 'ITZY (있지) - SNEAKERS' },
+  { id: 'K9_VFxzCuQ0', title: 'DAY6 (데이식스) - 한 페이지가 될 수 있게' },
+  { id: 'HhqQCAQkGec', title: 'QWER (큐더블유이알) - 고민중독' }
 ];
 
 // ── YouTube Helpers ────────────────────────────────────────────────────────
@@ -74,7 +85,6 @@ class DrumSynth {
   unlock() {
     if (!this.ctx) this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (this.ctx.state === 'suspended') this.ctx.resume();
-    // silent ping to unlock iOS
     const g = this.ctx.createGain(); g.gain.value = 0.0001;
     const o = this.ctx.createOscillator();
     o.connect(g); g.connect(this.ctx.destination);
@@ -124,7 +134,12 @@ export default function BeatDrop() {
 
   // ── URL Input State ──
   const [screen, setScreen] = useState<'input' | 'player'>('input');
+  const [inputMode, setInputMode] = useState<'link' | 'search'>('link');
   const [urlInput, setUrlInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{id: string, title: string, artist: string}[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
   const [videoId, setVideoId] = useState<string | null>(null);
   const [videoTitle, setVideoTitle] = useState('');
   const [urlError, setUrlError] = useState('');
@@ -144,6 +159,7 @@ export default function BeatDrop() {
   const [finishMood, setFinishMood] = useState<string | null>(null);
 
   const ytPlayerRef = useRef<any>(null);
+  const ytPlayerContainerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>();
   const lastTRef = useRef<number>(0);
   const playedRef = useRef<Set<string>>(new Set());
@@ -159,15 +175,22 @@ export default function BeatDrop() {
 
   // ── Create YT Player when videoId is set & API ready ──────────────────
   useEffect(() => {
-    if (!ytReady || !videoId || screen !== 'player') return;
+    if (!ytReady || !videoId || screen !== 'player' || !ytPlayerContainerRef.current) return;
 
     // Destroy old player if exists
     if (ytPlayerRef.current) {
       try { ytPlayerRef.current.destroy(); } catch {}
       ytPlayerRef.current = null;
     }
+    
+    // Clear container and create new div to avoid React unmount conflicts
+    ytPlayerContainerRef.current.innerHTML = '';
+    const playerDiv = document.createElement('div');
+    playerDiv.style.width = '100%';
+    playerDiv.style.height = '180px';
+    ytPlayerContainerRef.current.appendChild(playerDiv);
 
-    ytPlayerRef.current = new window.YT.Player('yt-player', {
+    ytPlayerRef.current = new window.YT.Player(playerDiv, {
       videoId,
       playerVars: {
         autoplay: 1,
@@ -188,6 +211,9 @@ export default function BeatDrop() {
       if (ytPlayerRef.current) {
         try { ytPlayerRef.current.destroy(); } catch {}
         ytPlayerRef.current = null;
+      }
+      if (ytPlayerContainerRef.current) {
+        ytPlayerContainerRef.current.innerHTML = '';
       }
     };
   }, [ytReady, videoId, screen]);
@@ -214,7 +240,7 @@ export default function BeatDrop() {
             });
           }
           if (next >= 256) {
-            playedRef.current.clear(); // 루프 리셋 시 재생 기록 초기화
+            playedRef.current.clear();
             return 0;
           }
           return next;
@@ -244,6 +270,42 @@ export default function BeatDrop() {
     setLoadingTitle(false);
     setScreen('player');
   }, [urlInput, bpm, setCurrentTrack]);
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    setUrlError('');
+    try {
+      const res = await fetch(`https://pipedapi.kavin.rocks/search?q=${encodeURIComponent(searchQuery + ' official')}&filter=music_songs`);
+      if (!res.ok) throw new Error('Search failed');
+      const data = await res.json();
+      const results = data.items.filter((i: any) => i.type === 'stream').slice(0, 5).map((i: any) => ({
+        id: i.url.split('?v=')[1] || i.url.split('/watch?v=')[1],
+        title: i.title,
+        artist: i.uploaderName || 'YouTube'
+      }));
+      setSearchResults(results);
+    } catch (e) {
+      console.error(e);
+      setUrlError('검색에 실패했습니다. 다른 검색어나 링크를 사용해주세요.');
+    }
+    setIsSearching(false);
+  };
+  
+  const handleSelectSearchResult = (song: {id: string, title: string, artist: string}) => {
+    setVideoId(song.id);
+    setVideoTitle(song.title);
+    setCurrentTrack({ title: song.title, artist: song.artist, bpm });
+    setScreen('player');
+  };
+
+  const handleRandomPlay = () => {
+    const song = RANDOM_SONGS[Math.floor(Math.random() * RANDOM_SONGS.length)];
+    setVideoId(song.id);
+    setVideoTitle(song.title);
+    setCurrentTrack({ title: song.title, artist: 'YouTube', bpm });
+    setScreen('player');
+  };
 
   const toggleDrum = () => {
     synth.unlock();
@@ -276,9 +338,9 @@ export default function BeatDrop() {
   // ══════════════════════════════════════════════════════════════════════
   if (screen === 'input') {
     return (
-      <div className="h-screen flex flex-col items-center justify-center p-6 gap-8">
+      <div className="h-screen flex flex-col items-center justify-center p-6 gap-6 overflow-y-auto pt-12">
         {/* Logo */}
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-2 flex-shrink-0">
           <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto"
             style={{ background: 'linear-gradient(135deg, var(--neon-pink), var(--neon-cyan))', boxShadow: '0 0 30px var(--neon-pink)' }}>
             <Music className="w-10 h-10 text-white" />
@@ -286,27 +348,78 @@ export default function BeatDrop() {
           <h1 className="text-3xl font-bold" style={{ color: 'var(--neon-pink)', textShadow: '0 0 15px var(--neon-pink)' }}>
             Beat Drop
           </h1>
-          <p className="text-sm opacity-60">유튜브 링크를 붙여넣으면 음악과 함께 연습할 수 있어요!</p>
+          <p className="text-sm opacity-60">원하는 곡에 맞춰 드럼을 연습해보세요!</p>
         </div>
 
         {/* Input Card */}
-        <div className="w-full max-w-sm space-y-4">
-          <div className="relative">
-            <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 opacity-40" />
-            <input
-              type="text"
-              value={urlInput}
-              onChange={e => { setUrlInput(e.target.value); setUrlError(''); }}
-              onKeyDown={e => e.key === 'Enter' && handleSubmitUrl()}
-              placeholder="https://youtu.be/..."
-              className="w-full pl-12 pr-4 py-4 rounded-2xl text-base outline-none"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                border: urlError ? '2px solid var(--neon-pink)' : '1px solid rgba(255,255,255,0.15)',
-                color: 'white',
-              }}
-            />
+        <div className="w-full max-w-sm space-y-4 pb-10">
+          {/* Tabs */}
+          <div className="flex gap-2 p-1 rounded-xl" style={{ background: 'rgba(255,255,255,0.05)' }}>
+            <button className="flex-1 py-2 text-sm rounded-lg font-medium transition-all"
+              onClick={() => { setInputMode('link'); setUrlError(''); }}
+              style={{ background: inputMode === 'link' ? 'rgba(255,255,255,0.1)' : 'transparent', color: inputMode === 'link' ? 'var(--neon-pink)' : 'rgba(255,255,255,0.5)' }}>
+              링크 붙여넣기
+            </button>
+            <button className="flex-1 py-2 text-sm rounded-lg font-medium transition-all"
+              onClick={() => { setInputMode('search'); setUrlError(''); }}
+              style={{ background: inputMode === 'search' ? 'rgba(255,255,255,0.1)' : 'transparent', color: inputMode === 'search' ? 'var(--neon-cyan)' : 'rgba(255,255,255,0.5)' }}>
+              유튜브 검색
+            </button>
           </div>
+
+          {inputMode === 'link' ? (
+            <div className="relative">
+              <Link className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 opacity-40" />
+              <input
+                type="text"
+                value={urlInput}
+                onChange={e => { setUrlInput(e.target.value); setUrlError(''); }}
+                onKeyDown={e => e.key === 'Enter' && handleSubmitUrl()}
+                placeholder="https://youtu.be/..."
+                className="w-full pl-12 pr-4 py-4 rounded-2xl text-base outline-none"
+                style={{
+                  background: 'rgba(255,255,255,0.05)',
+                  border: urlError ? '2px solid var(--neon-pink)' : '1px solid rgba(255,255,255,0.15)',
+                  color: 'white',
+                }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 opacity-40" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => { setSearchQuery(e.target.value); setUrlError(''); }}
+                    onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                    placeholder="곡명, 아티스트 검색"
+                    className="w-full pl-12 pr-4 py-4 rounded-2xl text-base outline-none"
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.15)', color: 'white' }}
+                  />
+                </div>
+                <button onClick={handleSearch} disabled={!searchQuery || isSearching} className="px-4 rounded-2xl" style={{ background: 'rgba(95,251,241,0.1)', color: 'var(--neon-cyan)', border: '1px solid var(--neon-cyan)' }}>
+                  {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                </button>
+              </div>
+
+              {/* Search Results */}
+              {searchResults.length > 0 && (
+                <div className="space-y-2 mt-4 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                  {searchResults.map(res => (
+                    <button key={res.id} onClick={() => handleSelectSearchResult(res)} className="w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all hover:scale-[1.02]" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <Youtube className="w-5 h-5 flex-shrink-0" style={{ color: 'var(--neon-pink)' }} />
+                      <div className="flex-1 overflow-hidden">
+                        <div className="text-sm font-medium truncate">{res.title}</div>
+                        <div className="text-xs opacity-50 truncate">{res.artist}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {urlError && (
             <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="text-sm px-2" style={{ color: 'var(--neon-pink)' }}>
@@ -315,7 +428,7 @@ export default function BeatDrop() {
           )}
 
           {/* BPM Selector */}
-          <div className="space-y-2 px-1">
+          <div className="space-y-2 px-1 pt-2">
             <div className="flex justify-between text-xs opacity-60">
               <span>빠르기 (BPM)</span>
               <span style={{ color: 'var(--neon-pink)' }}>{bpm}</span>
@@ -324,27 +437,16 @@ export default function BeatDrop() {
               style={{ background: `linear-gradient(to right, var(--neon-pink) 0%, var(--neon-pink) ${((bpm - 60) / 140) * 100}%, rgba(255,0,255,0.15) ${((bpm - 60) / 140) * 100}%, rgba(255,0,255,0.15) 100%)` }} />
           </div>
 
-          {/* Common BPM buttons */}
-          <div className="flex gap-2 flex-wrap">
-            {[80, 100, 120, 140, 160].map(b => (
-              <button key={b} onClick={() => setBpm(b)}
-                className="px-3 py-1 rounded-full text-xs transition-all"
-                style={{ background: bpm === b ? 'var(--neon-pink)' : 'rgba(255,255,255,0.08)', color: bpm === b ? 'white' : 'rgba(255,255,255,0.6)' }}>
-                {b}
-              </button>
-            ))}
-          </div>
-
-          <motion.button whileTap={{ scale: 0.97 }} onClick={handleSubmitUrl} disabled={!urlInput || loadingTitle}
-            className="w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50"
+          <motion.button whileTap={{ scale: 0.97 }} onClick={inputMode === 'link' ? handleSubmitUrl : handleSearch} disabled={(inputMode === 'link' && !urlInput) || loadingTitle}
+            className="w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-2 disabled:opacity-50 mt-4"
             style={{ background: 'linear-gradient(135deg, var(--neon-pink), var(--neon-cyan))', boxShadow: '0 0 20px rgba(255,0,255,0.4)' }}>
-            {loadingTitle ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>연습 시작하기</span><ArrowRight className="w-5 h-5" /></>}
+            {loadingTitle ? <Loader2 className="w-5 h-5 animate-spin" /> : <><span>{inputMode === 'link' ? '연습 시작하기' : '검색하기'}</span><ArrowRight className="w-5 h-5" /></>}
           </motion.button>
 
-          <p className="text-center text-xs opacity-40">
-            링크 없이 그냥 시작하고 싶다면?{' '}
-            <button className="underline opacity-70" onClick={() => { setVideoId('dQw4w9WgXcQ'); setVideoTitle('자유 연습'); setScreen('player'); }}>
-              자유 연습 모드
+          <p className="text-center text-xs opacity-40 pt-4">
+            어떤 곡을 칠지 모르겠다면?{' '}
+            <button className="underline opacity-70" onClick={handleRandomPlay}>
+              최신곡 랜덤 재생 (자유 연습)
             </button>
           </p>
         </div>
@@ -361,8 +463,8 @@ export default function BeatDrop() {
       {/* YouTube Player - collapsible mini player at top */}
       <div className="flex-shrink-0 px-4 pt-4 pb-2">
         <div className="relative rounded-2xl overflow-hidden" style={{ background: 'var(--dark-surface)', border: '1px solid rgba(255,255,255,0.1)' }}>
-          {/* YouTube iframe */}
-          <div id="yt-player" style={{ width: '100%', height: '180px' }} />
+          {/* YouTube iframe container */}
+          <div ref={ytPlayerContainerRef} style={{ width: '100%', height: '180px' }} />
 
           {/* Overlay info bar */}
           <div className="absolute top-2 left-2 right-2 flex items-center justify-between">
