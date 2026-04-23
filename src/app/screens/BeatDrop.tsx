@@ -224,61 +224,66 @@ export default function BeatDrop() {
     setIsSearching(true); setUrlError(''); synth.unlock();
     const searchPromise = (async () => {
       const query = encodeURIComponent(searchQuery);
-      // Using only the most stable instances currently known
-      const apiBases = [
-        'https://pipedapi.rivo.cc',
-        'https://api-piped.mha.fi',
-        'https://piped-api.lunar.icu',
-        'https://pipedapi.kavin.rocks'
-      ];
+      
+      // Verified working instances as of now
+      const pipedBases = ['https://api.piped.private.coffee'];
+      const invidiousBases = ['https://inv.thepixora.com', 'https://yt.chocolatemoo53.com'];
 
-      for (const base of apiBases) {
-        try {
-          const res = await fetch(`${base}/search?q=${query}&filter=all`, { 
-            headers: { 'Accept': 'application/json' } 
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.items) {
-              const items = data.items
-                .filter((i: any) => i.type === 'stream')
-                .slice(0, 8)
-                .map((i: any) => ({
-                  id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
-                  title: i.title, 
-                  artist: i.uploaderName || 'YouTube'
-                }))
-                .filter((r: any) => r.id && r.id.length === 11);
-              if (items.length > 0) return items;
-            }
+      return new Promise((resolve, reject) => {
+        let finished = false;
+        
+        // Helper to resolve with standard format
+        const resolveSuccess = (items: any[]) => {
+          if (!finished && items && items.length > 0) {
+            finished = true;
+            resolve(items);
           }
-        } catch (e) {
-          console.error(`Search failed on ${base}:`, e);
-        }
-      }
-      
-      try {
-        const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
-        if (res.ok) return await res.json();
-      } catch (e) {}
-      
-      return null;
+        };
+
+        // Try Piped APIs
+        pipedBases.forEach(async (base) => {
+          try {
+            const res = await fetch(`${base}/search?q=${query}&filter=all`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.items) {
+                const items = data.items.filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
+                  id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
+                  title: i.title, artist: i.uploaderName || 'YouTube'
+                })).filter((r: any) => r.id && r.id.length === 11);
+                resolveSuccess(items);
+              }
+            }
+          } catch (e) {}
+        });
+
+        // Try Invidious APIs
+        invidiousBases.forEach(async (base) => {
+          try {
+            const res = await fetch(`${base}/api/v1/search?q=${query}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (Array.isArray(data)) {
+                const items = data.slice(0, 8).map((i: any) => ({
+                  id: i.videoId, title: i.title, artist: i.author || 'YouTube'
+                })).filter((r: any) => r.id && r.id.length === 11);
+                resolveSuccess(items);
+              }
+            }
+          } catch (e) {}
+        });
+
+        // Timeout fallback
+        setTimeout(() => { if (!finished) reject(new Error('timeout')); }, 12000);
+      });
     })();
 
     try {
-      const result: any = await Promise.race([
-        searchPromise,
-        new Promise(resolve => setTimeout(() => resolve('timeout'), 12000))
-      ]);
-      
-      if (result && result !== 'timeout') {
-        setSearchResults(result);
-        setUrlError('');
-      } else {
-        setUrlError(result === 'timeout' ? '검색 시간이 초과되었습니다.' : '결과를 찾을 수 없습니다.');
-      }
+      const result: any = await searchPromise;
+      setSearchResults(result);
+      setUrlError('');
     } catch (e) {
-      setUrlError('검색 중 오류가 발생했습니다.');
+      setUrlError('검색 결과를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
     } finally {
       setIsSearching(false);
     }
