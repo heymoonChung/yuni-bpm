@@ -116,7 +116,6 @@ export default function BeatDrop() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ── States ──
   const [screen, setScreen] = useState<'input' | 'player'>('input');
   const [inputMode, setInputMode] = useState<'search' | 'link'>('search');
   const [urlInput, setUrlInput] = useState('');
@@ -142,7 +141,6 @@ export default function BeatDrop() {
   const lastTRef = useRef<number>(0);
   const playedRef = useRef<Set<string>>(new Set());
 
-  // ── YouTube API ──
   useEffect(() => {
     if (window.YT && window.YT.Player) { setYtReady(true); return; }
     const tag = document.createElement('script');
@@ -161,42 +159,64 @@ export default function BeatDrop() {
     ytPlayerRef.current = new window.YT.Player(playerDiv, {
       videoId,
       playerVars: { autoplay: 1, controls: 1, playsinline: 1, rel: 0, modestbranding: 1 },
-      events: { onStateChange: (e: any) => setPlaying(e.data === 1) }
+      events: { 
+        onStateChange: (e: any) => {
+          // 1: PLAYING, 3: BUFFERING
+          const isActuallyPlaying = e.data === 1 || e.data === 3;
+          setPlaying(isActuallyPlaying);
+        }
+      }
     });
   }, [ytReady, videoId, screen]);
 
-  // ── Animation ──
   useEffect(() => {
     if (playing) {
       const animate = (ts: number) => {
-        if (!lastTRef.current) lastTRef.current = ts;
-        const delta = ts - lastTRef.current;
-        const inc = (delta / 1000) * (bpm / 60) * 4;
-        setCurrentTime(prev => {
-          const next = prev + inc;
-          if (!isMuted) {
-            notes.forEach(n => {
-              if (n.time <= next && !playedRef.current.has(n.id)) {
+        if (!ytPlayerRef.current || typeof ytPlayerRef.current.getCurrentTime !== 'function') {
+          animRef.current = requestAnimationFrame(animate);
+          return;
+        }
+
+        // Use YouTube time as ground truth but interpolate for smoothness
+        const videoTime = ytPlayerRef.current.getCurrentTime();
+        const targetBeat = videoTime * (bpm / 60) * 4;
+        
+        // Loop every 256 beats (16 bars)
+        const loopedBeat = targetBeat % 256;
+        
+        setCurrentTime(loopedBeat);
+
+        // Sound triggers
+        if (!isMuted) {
+          notes.forEach(n => {
+            if (n.time <= loopedBeat && !playedRef.current.has(n.id)) {
+              // Only trigger if we are close to the note (prevent triggering old notes when seeking)
+              if (loopedBeat - n.time < 1) {
                 playedRef.current.add(n.id);
                 if (n.lane === 0) synth.hihat();
                 if (n.lane === 1) synth.snare();
                 if (n.lane === 2) synth.kick();
                 if (n.lane === 3) synth.cymbal();
               }
-            });
-          }
-          if (next >= 256) { playedRef.current.clear(); return 0; }
-          return next;
-        });
-        lastTRef.current = ts;
+            }
+          });
+        }
+
+        // Reset triggers if we jump back significantly (loop or seek)
+        if (loopedBeat < 1) {
+          playedRef.current.clear();
+        }
+
         animRef.current = requestAnimationFrame(animate);
       };
       animRef.current = requestAnimationFrame(animate);
-    } else { if (animRef.current) cancelAnimationFrame(animRef.current); lastTRef.current = 0; }
+    } else { 
+      if (animRef.current) cancelAnimationFrame(animRef.current); 
+      lastTRef.current = 0; 
+    }
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
   }, [playing, bpm, isMuted, notes]);
 
-  // ── Handlers ──
   const handleSelectSearchResult = (song: {id: string, title: string, artist: string}) => {
     synth.unlock();
     setVideoId(song.id); setVideoTitle(song.title);
@@ -207,32 +227,41 @@ export default function BeatDrop() {
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true); setUrlError(''); synth.unlock();
-    const query = encodeURIComponent(searchQuery);
-
-    try {
-      const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.length > 0) { setSearchResults(data.slice(0, 8)); setIsSearching(false); return; }
-      }
-    } catch {}
-
-    const apiBases = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee', 'https://piped-api.garudalinux.org'];
-    for (const base of apiBases) {
+    const searchPromise = (async () => {
       try {
-        const res = await fetch(`${base}/search?q=${query}&filter=all`);
+        const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
         if (res.ok) {
           const data = await res.json();
-          const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
-            id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
-            title: i.title, artist: i.uploaderName || 'YouTube'
-          })).filter((r: any) => r.id && r.id.length === 11);
-          if (items.length > 0) { setSearchResults(items); setIsSearching(false); return; }
+          if (data.length > 0) return data.slice(0, 8);
         }
       } catch {}
-    }
-    setUrlError('검색 결과를 가져오지 못했습니다. 파이썬 서버를 확인해 주세요.');
+      
+      const apiBases = ['https://pipedapi.kavin.rocks', 'https://api.piped.private.coffee', 'https://piped-api.garudalinux.org'];
+      for (const base of apiBases) {
+        try {
+          const res = await fetch(`${base}/search?q=${query}&filter=all`);
+          if (res.ok) {
+            const data = await res.json();
+            const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
+              id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
+              title: i.title, artist: i.uploaderName || 'YouTube'
+            })).filter((r: any) => r.id && r.id.length === 11);
+            if (items.length > 0) return items;
+          }
+        } catch {}
+      }
+      return null;
+    })();
+
+    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve('timeout'), 15000));
+    const result: any = await Promise.race([searchPromise, timeoutPromise]);
+
     setIsSearching(false);
+    if (result && result !== 'timeout' && result !== null) {
+      setSearchResults(result);
+    } else {
+      setUrlError(result === 'timeout' ? '검색 시간이 초과되었습니다. 다시 시도해주세요.' : '검색 결과를 가져오지 못했습니다. 파이썬 서버를 확인해 주세요.');
+    }
   };
 
   const handleSubmitUrl = async () => {
@@ -267,29 +296,30 @@ export default function BeatDrop() {
 
   const hitLine = 82;
 
-  // ══════════════════════════════════════════════════════════════════════
-  // UI: Input (Exact match to Screenshot)
-  // ══════════════════════════════════════════════════════════════════════
   if (screen === 'input') {
     return (
       <div className="h-screen flex flex-col items-center justify-center p-6 gap-8 bg-[#0D0D0D]">
-        <div className="text-center space-y-4">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto"
-            style={{ background: 'linear-gradient(135deg, var(--neon-pink), var(--neon-cyan))', boxShadow: '0 0 30px var(--neon-pink)' }}>
-            <Music className="w-10 h-10 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold" style={{ color: 'var(--neon-pink)', textShadow: '0 0 15px var(--neon-pink)' }}>Beat Drop</h1>
-          <p className="text-sm opacity-70 text-white">원하는 곡에 맞춰 드럼을 연습해보세요!</p>
+        <div className="text-center space-y-2">
+          <style>{`
+            @keyframes neon-pulse {
+              0%, 100% { text-shadow: 0 0 20px var(--neon-pink), 0 0 40px var(--neon-pink); }
+              50% { text-shadow: 0 0 30px var(--neon-pink), 0 0 60px var(--neon-pink), 0 0 80px var(--neon-pink); }
+            }
+            .yuni-neon-title {
+              animation: neon-pulse 2s ease-in-out infinite;
+            }
+          `}</style>
+          <h1 className="text-6xl font-black tracking-tighter yuni-neon-title" style={{ color: 'var(--neon-pink)' }}>YUNI.BPM</h1>
+          <h2 className="text-xl font-bold tracking-[0.3em]" style={{ color: 'var(--neon-cyan)', textShadow: '0 0 15px var(--neon-cyan)' }}>DRUM PRACTICE APP</h2>
+          <p className="text-sm opacity-40 text-white pt-4">Yuni's personal practice companion</p>
         </div>
-
         <div className="w-full max-w-sm space-y-6">
-          <div className="flex gap-1 p-1 rounded-2xl bg-[#1A1C22]">
-            <button onClick={() => setInputMode('search')} className="flex-1 py-3 text-sm font-bold rounded-xl transition-all"
-              style={{ background: inputMode === 'search' ? '#2A2D35' : 'transparent', color: inputMode === 'search' ? '#5FFBF1' : '#FFFFFF' }}>유튜브 검색</button>
-            <button onClick={() => setInputMode('link')} className="flex-1 py-3 text-sm font-bold rounded-xl transition-all"
-              style={{ background: inputMode === 'link' ? '#2A2D35' : 'transparent', color: inputMode === 'link' ? '#5FFBF1' : '#FFFFFF' }}>링크 붙여넣기</button>
+          <div className="flex gap-2 p-1.5 rounded-full bg-[#1A1C22] border border-white/5">
+            <button onClick={() => setInputMode('search')} className="flex-1 py-3 text-sm font-bold rounded-full transition-all"
+              style={{ background: inputMode === 'search' ? 'var(--neon-pink)' : 'transparent', color: '#FFFFFF', boxShadow: inputMode === 'search' ? '0 0 15px var(--neon-pink)' : 'none' }}>유튜브 검색</button>
+            <button onClick={() => setInputMode('link')} className="flex-1 py-3 text-sm font-bold rounded-full transition-all"
+              style={{ background: inputMode === 'link' ? 'var(--neon-cyan)' : 'transparent', color: inputMode === 'link' ? '#000000' : '#FFFFFF', boxShadow: inputMode === 'link' ? '0 0 15px var(--neon-cyan)' : 'none' }}>링크 붙여넣기</button>
           </div>
-
           {inputMode === 'search' ? (
             <div className="space-y-4">
               <div className="flex gap-2">
@@ -320,24 +350,26 @@ export default function BeatDrop() {
                 placeholder="https://youtu.be/..." className="w-full pl-12 pr-4 py-4 rounded-2xl bg-[#16181D] text-white outline-none border border-white/5" />
             </div>
           )}
-
           <div className="space-y-2">
             <div className="flex justify-between text-xs font-bold"><span className="text-white opacity-60">빠르기 (BPM)</span><span className="text-pink-500">{bpm}</span></div>
             <input type="range" min="60" max="200" value={bpm} onChange={e => setBpm(Number(e.target.value))} className="w-full h-1 accent-[#FF00FF]" />
           </div>
-
-          <button onClick={inputMode === 'search' ? handleSearch : handleSubmitUrl} className="w-full py-5 rounded-2xl font-bold text-xl text-white flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(90deg, #FF00FF, #48A9FE)', boxShadow: '0 0 25px rgba(255,0,255,0.4)' }}>
-            시작하기 <ArrowRight className="w-6 h-6" />
+          <button 
+            onClick={inputMode === 'search' ? handleSearch : handleSubmitUrl} 
+            disabled={isSearching || loadingTitle}
+            className="w-full py-5 rounded-full font-bold text-xl text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+            style={{ 
+              background: 'transparent', 
+              border: `2px solid ${inputMode === 'search' ? 'var(--neon-pink)' : 'var(--neon-cyan)'}`,
+              boxShadow: `0 0 20px ${inputMode === 'search' ? 'var(--neon-pink)' : 'var(--neon-cyan)'}40` 
+            }}>
+            {isSearching || loadingTitle ? <Loader2 className="w-6 h-6 animate-spin" /> : <>연습 시작하기 <ArrowRight className="w-6 h-6" /></>}
           </button>
         </div>
       </div>
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════
-  // UI: Player
-  // ══════════════════════════════════════════════════════════════════════
   return (
     <div className="h-screen flex flex-col bg-[#0A0A0A] text-white">
       <div className="p-4 flex-shrink-0">
@@ -349,7 +381,6 @@ export default function BeatDrop() {
           </div>
         </div>
       </div>
-
       <div className="flex-1 relative overflow-hidden mx-4 rounded-3xl bg-black/40 border border-white/5">
         <div className="absolute inset-0 grid grid-cols-4">
           {LANES.map(lane => (
@@ -360,8 +391,8 @@ export default function BeatDrop() {
                   const pct = ((note.time - currentTime) / 32) * 100;
                   return (
                     <motion.div key={note.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                      className="absolute left-1/2 -translate-x-1/2 rounded-xl"
-                      style={{ top: `${hitLine - pct}%`, width: 44, height: 24, background: lane.color, boxShadow: `0 0 20px ${lane.color}`, border: '2px solid rgba(255,255,255,0.4)' }} />
+                      className="absolute left-1/2 -translate-x-1/2 rounded-full"
+                      style={{ top: `${hitLine - pct}%`, width: 36, height: 12, background: lane.color, boxShadow: `0 0 15px ${lane.color}`, border: '1.5px solid rgba(255,255,255,0.5)' }} />
                   );
                 })}
               </AnimatePresence>
@@ -370,7 +401,6 @@ export default function BeatDrop() {
         </div>
         <div className="absolute left-0 right-0 h-[3px] bg-white z-10" style={{ top: `${hitLine}%`, boxShadow: '0 0 20px white' }} />
       </div>
-
       <div className="p-8 flex-shrink-0 space-y-8">
         <div className="flex items-center justify-center gap-10">
           <motion.button whileTap={{ scale: 0.9 }} onClick={handleReset} className="w-16 h-16 rounded-full flex items-center justify-center bg-white/5 border border-white/10"><RotateCcw className="w-8 h-8 opacity-60" /></motion.button>
