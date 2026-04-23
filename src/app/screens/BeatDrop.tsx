@@ -223,46 +223,49 @@ export default function BeatDrop() {
     if (!searchQuery.trim()) return;
     setIsSearching(true); setUrlError(''); synth.unlock();
     const searchPromise = (async () => {
-      try {
-        const query = encodeURIComponent(searchQuery);
-        const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.length > 0) return data.slice(0, 8);
-        }
-      } catch {}
-      
-      const apiBases = [
-        'https://pipedapi.kavin.rocks', 
-        'https://piped-api.lunar.icu', 
-        'https://api-piped.mha.fi', 
-        'https://pipedapi.rivo.cc'
-      ];
       const query = encodeURIComponent(searchQuery);
-      for (const base of apiBases) {
+      const apiBases = [
+        'http://localhost:8000/api/search?q=',
+        'https://pipedapi.kavin.rocks/search?filter=all&q=', 
+        'https://piped-api.lunar.icu/search?filter=all&q=',
+        'https://api-piped.mha.fi/search?filter=all&q=',
+        'https://pipedapi.rivo.cc/search?filter=all&q='
+      ];
+
+      // Try all APIs in parallel and take the first one that succeeds
+      return Promise.any(apiBases.map(async (base) => {
         try {
-          const res = await fetch(`${base}/search?q=${query}&filter=all`);
+          const res = await fetch(`${base}${query}`, { signal: AbortSignal.timeout(5000) });
           if (res.ok) {
             const data = await res.json();
-            const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
-              id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
-              title: i.title, artist: i.uploaderName || 'YouTube'
-            })).filter((r: any) => r.id && r.id.length === 11);
-            if (items.length > 0) return items;
+            // Handle local backend format (array of {id, title, artist})
+            if (Array.isArray(data) && data.length > 0 && data[0].id) {
+              return data.slice(0, 8);
+            }
+            // Handle Piped API format
+            if (data.items) {
+              const items = data.items.filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
+                id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
+                title: i.title, artist: i.uploaderName || 'YouTube'
+              })).filter((r: any) => r.id && r.id.length === 11);
+              if (items.length > 0) return items;
+            }
           }
-        } catch {}
-      }
-      return null;
+        } catch (e) {}
+        throw new Error('Failed');
+      }));
     })();
 
-    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve('timeout'), 15000));
-    const result: any = await Promise.race([searchPromise, timeoutPromise]);
-
-    setIsSearching(false);
-    if (result && result !== 'timeout' && result !== null) {
+    try {
+      const result: any = await Promise.race([
+        searchPromise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10000))
+      ]);
       setSearchResults(result);
-    } else {
-      setUrlError(result === 'timeout' ? '검색 시간이 초과되었습니다. 다시 시도해주세요.' : '검색 결과를 가져오지 못했습니다. 파이썬 서버를 확인해 주세요.');
+    } catch (e) {
+      setUrlError('검색 결과를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsSearching(false);
     }
   };
 
