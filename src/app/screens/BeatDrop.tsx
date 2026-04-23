@@ -225,41 +225,48 @@ export default function BeatDrop() {
     const searchPromise = (async () => {
       const query = encodeURIComponent(searchQuery);
       const apiBases = [
-        'http://localhost:8000/api/search?q=',
-        'https://pipedapi.kavin.rocks/search?filter=all&q=', 
-        'https://piped-api.lunar.icu/search?filter=all&q=',
-        'https://api-piped.mha.fi/search?filter=all&q='
+        'https://pipedapi.kavin.rocks', 
+        'https://api.piped.private.coffee', 
+        'https://piped-api.garudalinux.org',
+        'https://pipedapi.rivo.cc'
       ];
 
-      // Fire all requests in parallel and take the first success
-      return new Promise((resolve, reject) => {
-        let finished = false;
-        apiBases.forEach(async (base) => {
-          try {
-            const res = await fetch(`${base}${query}`);
-            if (res.ok && !finished) {
-              const data = await res.json();
-              let results = null;
-              if (Array.isArray(data) && data.length > 0) results = data.slice(0, 8);
-              else if (data.items) {
-                results = data.items.filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
-                  id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
-                  title: i.title, artist: i.uploaderName || 'YouTube'
-                })).filter((r: any) => r.id && r.id.length === 11);
-              }
-              if (results && results.length > 0) { finished = true; resolve(results); }
-            }
-          } catch (e) {}
-        });
-        setTimeout(() => { if (!finished) reject(new Error('timeout')); }, 10000);
-      });
+      for (const base of apiBases) {
+        try {
+          const res = await fetch(`${base}/search?q=${query}&filter=all`);
+          if (res.ok) {
+            const data = await res.json();
+            const items = (data.items || []).filter((i: any) => i.type === 'stream').slice(0, 8).map((i: any) => ({
+              id: i.url.split('v=')[1]?.split('&')[0] || i.url.split('/').pop(),
+              title: i.title, artist: i.uploaderName || 'YouTube'
+            })).filter((r: any) => r.id && r.id.length === 11);
+            if (items.length > 0) return items;
+          }
+        } catch (e) {}
+      }
+      
+      // Fallback to local
+      try {
+        const res = await fetch(`http://localhost:8000/api/search?q=${query}`);
+        if (res.ok) return await res.json();
+      } catch (e) {}
+      
+      return null;
     })();
 
     try {
-      const result = await searchPromise;
-      setSearchResults(result as any);
+      const result: any = await Promise.race([
+        searchPromise,
+        new Promise(resolve => setTimeout(() => resolve('timeout'), 15000))
+      ]);
+      
+      if (result && result !== 'timeout') {
+        setSearchResults(result);
+      } else {
+        setUrlError(result === 'timeout' ? '검색 시간이 초과되었습니다.' : '검색 결과를 가져오지 못했습니다.');
+      }
     } catch (e) {
-      setUrlError('검색 결과를 가져오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      setUrlError('검색 중 오류가 발생했습니다.');
     } finally {
       setIsSearching(false);
     }
