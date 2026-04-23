@@ -4,6 +4,7 @@ export interface Track {
   title: string;
   artist: string;
   bpm: number;
+  videoId?: string;
 }
 
 interface TrackContextType {

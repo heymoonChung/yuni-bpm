@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, Pause, RotateCcw, Loader2, Volume2, VolumeX, Link, Music, ArrowRight, Search, Youtube } from 'lucide-react';
 import { useTrack } from '../context/TrackContext';
-import { useNavigate } from 'react-router';
+import { useNavigate, useLocation } from 'react-router';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Note {
@@ -129,8 +129,9 @@ const synth = new DrumSynth();
 // Main Component
 // ══════════════════════════════════════════════════════════════════════════
 export default function BeatDrop() {
-  const { setCurrentTrack } = useTrack();
+  const { currentTrack, setCurrentTrack } = useTrack();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // ── URL Input State ──
   const [screen, setScreen] = useState<'input' | 'player'>('input');
@@ -163,6 +164,16 @@ export default function BeatDrop() {
   const animRef = useRef<number>();
   const lastTRef = useRef<number>(0);
   const playedRef = useRef<Set<string>>(new Set());
+
+  // ── Auto-load if continuing practice ──────────────────────────────────
+  useEffect(() => {
+    if (location.state?.continue && currentTrack?.videoId) {
+      setVideoId(currentTrack.videoId);
+      setVideoTitle(currentTrack.title);
+      setBpm(currentTrack.bpm);
+      setScreen('player');
+    }
+  }, [location.state, currentTrack]);
 
   // ── Load YouTube IFrame API once ───────────────────────────────────────
   useEffect(() => {
@@ -266,7 +277,7 @@ export default function BeatDrop() {
     const title = await fetchVideoTitle(id);
     setVideoTitle(title);
     setVideoId(id);
-    setCurrentTrack({ title, artist: 'YouTube', bpm });
+    setCurrentTrack({ title, artist: 'YouTube', bpm, videoId: id });
     setLoadingTitle(false);
     setScreen('player');
   }, [urlInput, bpm, setCurrentTrack]);
@@ -295,7 +306,7 @@ export default function BeatDrop() {
   const handleSelectSearchResult = (song: {id: string, title: string, artist: string}) => {
     setVideoId(song.id);
     setVideoTitle(song.title);
-    setCurrentTrack({ title: song.title, artist: song.artist, bpm });
+    setCurrentTrack({ title: song.title, artist: song.artist, bpm, videoId: song.id });
     setScreen('player');
   };
 
@@ -303,7 +314,7 @@ export default function BeatDrop() {
     const song = RANDOM_SONGS[Math.floor(Math.random() * RANDOM_SONGS.length)];
     setVideoId(song.id);
     setVideoTitle(song.title);
-    setCurrentTrack({ title: song.title, artist: 'YouTube', bpm });
+    setCurrentTrack({ title: song.title, artist: 'YouTube', bpm, videoId: song.id });
     setScreen('player');
   };
 

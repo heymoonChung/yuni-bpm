@@ -187,7 +187,7 @@ export default function Home() {
 
           <motion.button
             whileTap={{ scale: 0.97 }}
-            onClick={() => navigate('/beat-drop')}
+            onClick={() => navigate('/beat-drop', { state: { continue: true } })}
             className="w-full h-16 rounded-2xl flex items-center justify-center gap-2"
             style={{
               background: 'linear-gradient(135deg, var(--neon-pink), var(--neon-cyan))',
